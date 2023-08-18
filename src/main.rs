@@ -1,21 +1,23 @@
-use anyhow::{Ok, Result};
+use anyhow::{Result};
 use bytes::Bytes;
 use ethers_contract::BaseContract;
 use ethers_core::abi::parse_abi;
 use ethers_providers::{Http, Provider};
 use revm::{
     db::{CacheDB, EmptyDB, EthersDB},
-    primitives::{ExecutionResult, Output, TransactTo, U256 as rU256},
+    primitives::{ExecutionResult, Output, TransactTo, Address as B160, U256 as rU256},
     Database, EVM,
 };
 
 use std::{str::FromStr, sync::Arc};
 
 #[tokio::main]
-async fn main() -> Result<(())> {
+async fn main() -> Result<()> {
     dotenv::dotenv().ok();
 
-    let http_url = "<HTTPS_RPC_ENDPOINT>";
+
+    let http_url =  std::env::var("HTTP_URL").unwrap();
+    println!("{}", http_url);
     let client = Provider::<Http>::try_from(http_url)?;
     let client = Arc::new(client);
 
@@ -32,7 +34,6 @@ async fn main() -> Result<(())> {
     cache_db.insert_account_info(pool_address, acc_info);
     cache_db.insert_account_storage(pool_address, slot, value).unwrap();
 
-
     let mut evm = EVM::new();
     evm.database(cache_db);
 
@@ -44,9 +45,8 @@ async fn main() -> Result<(())> {
 
     let encoded = pool_contract.encode("getReserves", ())?;
 
-    evm.env.caller = B160::from_str("0x0000000000000000000000000000000000000000")?;
+    evm.env.tx.caller = B160::from_str("0x0000000000000000000000000000000000000000")?;
     evm.env.tx.transact_to = TransactTo::Call(pool_address);
-    evm.env.tx.data = encoded.0;
     evm.env.tx.value = rU256::ZERO;
 
     let ref_tx = evm.transact_ref().unwrap();
@@ -62,7 +62,7 @@ async fn main() -> Result<(())> {
     println!("{:?}", value);
 
     let (reserve0, reserve1, ts): (u128, u128, u32) =
-    pool_contract.decode_output("getReserves", value.unwrap())?;
+        pool_contract.decode_output("getReserves", value.unwrap())?;
 
     println!("{:?} {:?} {:?}", reserve0, reserve1, ts);
     Ok(())
